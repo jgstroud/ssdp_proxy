@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Licensed under the MIT license
 # http://opensource.org/licenses/mit-license.php
 
@@ -21,9 +22,9 @@ SSDP_PORT = 1900
 SSDP_ADDR = '239.255.255.250'
 SERVER_ID = 'ZeWaren example SSDP Server'
 
-
-logger = logging.getLogger()
-
+logging.basicConfig()
+logger = logging.getLogger('logger')
+logger.setLevel(logging.DEBUG)
 
 class SSDPServer:
     """A class implementing a SSDP server.  The notify_received and
@@ -142,7 +143,7 @@ class SSDPServer:
 
         logger.info('Discovery request from (%s,%d) for %s' % (host, port, headers['st']))
         logger.info('Discovery request for %s' % headers['st'])
-
+        return
         # Do we know about this service?
         for i in self.known.values():
             if i['MANIFESTATION'] == 'remote':
@@ -224,3 +225,8 @@ class SSDPServer:
                     logger.error("failure sending out byebye notification: %r" % msg)
         except KeyError as msg:
             logger.error("error building byebye notification: %r" % msg)
+
+
+if __name__ == "__main__":
+   ssdp = SSDPServer()
+   ssdp.run()
