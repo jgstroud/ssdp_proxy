@@ -22,6 +22,9 @@ SSDP_PORT = 1900
 SSDP_ADDR = '239.255.255.250'
 SERVER_ID = 'ZeWaren example SSDP Server'
 
+TRUSTED_IP = '192.168.2.1'
+UNTRUSTED_IP = '192.168.50.1'
+
 logging.basicConfig()
 logger = logging.getLogger('logger')
 logger.setLevel(logging.DEBUG)
@@ -49,7 +52,7 @@ class SSDPServer:
                     raise
 
         addr = socket.inet_aton(SSDP_ADDR)
-        interface = socket.inet_aton('0.0.0.0')
+        interface = socket.inet_aton(TRUSTED_IP)
         cmd = socket.IP_ADD_MEMBERSHIP
         self.sock.setsockopt(socket.IPPROTO_IP, cmd, addr + interface)
         self.sock.bind(('0.0.0.0', SSDP_PORT))
@@ -91,7 +94,7 @@ class SSDPServer:
         logger.debug('with headers: {}.'.format(headers))
         if cmd[0] == 'M-SEARCH' and cmd[1] == '*':
             # SSDP discovery
-            self.discovery_request(headers, (host, port))
+            self.discovery_request(data, host_port)
         elif cmd[0] == 'NOTIFY' and cmd[1] == '*':
             # SSDP presence
             logger.debug('NOTIFY *')
@@ -135,38 +138,27 @@ class SSDPServer:
         except (AttributeError, socket.error) as msg:
             logger.warning("failure sending out byebye notification: %r" % msg)
 
-    def discovery_request(self, headers, host_port):
+    def discovery_request(self, data, addr):
         """Process a discovery request.  The response must be sent to
         the address specified by (host, port)."""
 
-        (host, port) = host_port
+        #logger.info('Discovery request from (%s)' % addr)
 
-        logger.info('Discovery request from (%s,%d) for %s' % (host, port, headers['st']))
-        logger.info('Discovery request for %s' % headers['st'])
+        # Set up UDP socket
+        csock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        csock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 4)
+        csock.settimeout(2)
+        csock.bind((UNTRUSTED_IP,0))
+        csock.sendto(data, ('239.255.255.250', 1900) )
+
+        try:
+            while True:
+                cdata, caddr = csock.recvfrom(65507)
+                print cdata
+                sent = self.sock.sendto(cdata, addr)
+        except socket.timeout:
+            pass
         return
-        # Do we know about this service?
-        for i in self.known.values():
-            if i['MANIFESTATION'] == 'remote':
-                continue
-            if headers['st'] == 'ssdp:all' and i['SILENT']:
-                continue
-            if i['ST'] == headers['st'] or headers['st'] == 'ssdp:all':
-                response = ['HTTP/1.1 200 OK']
-
-                usn = None
-                for k, v in i.items():
-                    if k == 'USN':
-                        usn = v
-                    if k not in ('MANIFESTATION', 'SILENT', 'HOST'):
-                        response.append('%s: %s' % (k, v))
-
-                if usn:
-                    response.append('DATE: %s' % formatdate(timeval=None, localtime=False, usegmt=True))
-
-                    response.extend(('', ''))
-                    delay = random.randint(0, int(headers['mx']))
-
-                    self.send_it('\r\n'.join(response), (host, port), delay, usn)
 
     def do_notify(self, usn):
         """Do notification"""
