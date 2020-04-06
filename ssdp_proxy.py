@@ -15,6 +15,8 @@ import random
 import time
 import socket
 import logging
+import fcntl
+import struct
 from email.utils import formatdate
 from errno import ENOPROTOOPT
 
@@ -22,12 +24,21 @@ SSDP_PORT = 1900
 SSDP_ADDR = '239.255.255.250'
 SERVER_ID = 'ZeWaren example SSDP Server'
 
-TRUSTED_IP = '192.168.2.1'
-UNTRUSTED_IP = '192.168.50.1'
+TRUSTED_DEV = 'eth1'
+UNTRUSTED_DEV = 'eth1.50'
 
 logging.basicConfig()
 logger = logging.getLogger('logger')
 logger.setLevel(logging.DEBUG)
+
+def get_ip_address(ifname):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    return socket.inet_ntoa(fcntl.ioctl(
+        s.fileno(),
+        0x8915,  # SIOCGIFADDR
+        struct.pack('256s', ifname[:15])
+    )[20:24])
+
 
 class SSDPServer:
     """A class implementing a SSDP server.  The notify_received and
@@ -52,7 +63,7 @@ class SSDPServer:
                     raise
 
         addr = socket.inet_aton(SSDP_ADDR)
-        interface = socket.inet_aton(TRUSTED_IP)
+        interface = socket.inet_aton(get_ip_address(TRUSTED_DEV))
         cmd = socket.IP_ADD_MEMBERSHIP
         self.sock.setsockopt(socket.IPPROTO_IP, cmd, addr + interface)
         self.sock.bind(('0.0.0.0', SSDP_PORT))
@@ -148,7 +159,7 @@ class SSDPServer:
         csock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         csock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 4)
         csock.settimeout(2)
-        csock.bind((UNTRUSTED_IP,0))
+        csock.bind((get_ipaddress(UNTRUSTED_DEV)),0))
         csock.sendto(data, ('239.255.255.250', 1900) )
 
         try:
